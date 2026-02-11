@@ -1,0 +1,21 @@
+price_features:
+  return_windows: [1, 7, 14, 30, 60, 90, 180, 365]
+  volatility_windows: [7, 30, 90]
+  ma_windows: [7, 30, 50, 200]
+  rsi_window: 14
+
+macro_features:
+  vix:
+    enabled: true
+    ma_window: 30
+  hy_spread:
+    enabled: true
+    ma_window: 30
+
+onchain_features:
+  mvrv:
+    enabled: true
+    ma_window: 30
+  volume:
+    enabled: true
+    ma_window: 30

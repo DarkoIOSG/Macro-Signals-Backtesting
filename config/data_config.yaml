@@ -1,0 +1,19 @@
+data_paths:
+  raw:
+    prices: "data/raw/prices/bitcoin_prices.csv"
+    vix: "data/raw/vix/vix_daily.csv"
+    hy_spreads: "data/raw/hy_spreads/hy_daily.csv"
+    mvrv: "data/raw/mvrv/mvrv_daily.csv"
+    volume: "data/raw/volume/volume_daily.csv"
+  processed:
+    dataset: "data/processed/full_dataset.parquet"
+    features: "data/features/engineered_features.parquet"
+
+date_ranges:
+  start_date: "2015-01-01"
+  end_date: null
+  train_ratio: 0.7
+
+target:
+  horizon_days: 30
+  column_name: "target_return_30d"

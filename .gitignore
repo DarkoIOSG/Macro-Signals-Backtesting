@@ -1,0 +1,42 @@
+# Data files
+data/raw/*
+data/processed/*
+data/features/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/features/.gitkeep
+
+# Model outputs
+results/models/*
+results/predictions/*
+results/metrics/*
+results/figures/*
+!results/models/.gitkeep
+!results/predictions/.gitkeep
+!results/metrics/.gitkeep
+!results/figures/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
