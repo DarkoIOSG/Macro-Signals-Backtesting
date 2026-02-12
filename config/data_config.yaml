@@ -1,10 +1,10 @@
 data_paths:
   raw:
-    prices: "data/raw/prices/bitcoin_prices.csv"
-    vix: "data/raw/vix/vix_daily.csv"
-    hy_spreads: "data/raw/hy_spreads/hy_daily.csv"
-    mvrv: "data/raw/mvrv/mvrv_daily.csv"
-    volume: "data/raw/volume/volume_daily.csv"
+    prices: "data/raw/prices/top500_prices_2015_to_today.csv"
+    vix: "data/raw/vix/vix_data.csv"
+    hy_spreads: "data/raw/hy_spreads/high_yield_spread_data.csv" 
+    mvrv: "data/raw/mvrv/mvrv_data.csv"
+    volume: "data/raw/volume/top500_volume_2015_to_today.csv"
   processed:
     dataset: "data/processed/full_dataset.parquet"
     features: "data/features/engineered_features.parquet"

@@ -18,14 +18,23 @@ class HyperparameterTuner:
         self.tscv = TimeSeriesSplit(n_splits=cv_splits)
     
     def tune_ridge(self, X_train, y_train, alphas: list = None) -> dict:
-        """Tune Ridge regression alpha."""
-        alphas = alphas or [0.001, 0.01, 0.1, 1.0, 10.0, 50.0, 100.0, 500.0, 1000.0]
+        from sklearn.pipeline import Pipeline
+        from sklearn.preprocessing import StandardScaler
+        
+        alphas = alphas or [0.001, 0.01, 0.1, 1.0, 5.0, 10.0, 20.0, 
+                            50.0, 100.0, 200.0, 500.0, 1000.0]
         
         logger.info(f"Tuning Ridge with {len(alphas)} alpha values...")
         
+        # Wrap in pipeline so scaler is applied inside each CV fold
+        pipeline = Pipeline([
+            ('scaler', StandardScaler()),
+            ('ridge', Ridge())
+        ])
+        
         grid_search = GridSearchCV(
-            estimator=Ridge(),
-            param_grid={'alpha': alphas},
+            estimator=pipeline,
+            param_grid={'ridge__alpha': alphas},  # note: ridge__alpha not alpha
             cv=self.tscv,
             scoring='neg_mean_squared_error',
             n_jobs=-1,
@@ -33,7 +42,7 @@ class HyperparameterTuner:
         )
         grid_search.fit(X_train, y_train)
         
-        best_alpha = grid_search.best_params_['alpha']
+        best_alpha = grid_search.best_params_['ridge__alpha']
         best_rmse = np.sqrt(-grid_search.best_score_)
         
         logger.info(f"Best Ridge alpha: {best_alpha} (CV RMSE: {best_rmse:.4f}%)")

@@ -56,7 +56,8 @@ class DataLoader:
         path = self.config['data_paths']['raw']['mvrv']
         logger.info(f"Loading MVRV from {path}")
         
-        df = pd.read_csv(path, index_col=0, parse_dates=True)
+        df = pd.read_csv(path, index_col=0, parse_dates=True, 
+                 date_format='ISO8601')
         df = ensure_datetime_index(df)
         df = remove_timezone(df)
         
