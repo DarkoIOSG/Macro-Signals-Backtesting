@@ -1,52 +1,112 @@
 import pytest
 import numpy as np
 import pandas as pd
+import sys
+sys.path.append('.')
+
 from src.models.ridge_model import RidgeModel
+from src.models.random_forest_model import RandomForestModel
+from src.models.gradient_boosting_model import GradientBoostingModel
 
 
-def test_ridge_fit_predict(sample_dataset):
-    """Test Ridge model fits and predicts."""
-    X = sample_dataset.drop('target', axis=1)
-    y = sample_dataset['target']
-    
-    model = RidgeModel()
-    model.fit(X, y, best_alpha=100.0)
-    
-    assert model.is_fitted
-    
-    predictions = model.predict(X)
-    assert len(predictions) == len(y)
+@pytest.fixture
+def sample_data():
+    """Small dataset for fast model testing."""
+    np.random.seed(42)
+    n = 300
+    dates = pd.date_range('2020-01-01', periods=n)
+    X = pd.DataFrame(
+        np.random.randn(n, 10),
+        columns=[f'feature_{i}' for i in range(10)],
+        index=dates
+    )
+    y = pd.Series(np.random.randn(n) * 10, index=dates, name='target')
+    return X, y
 
 
-def test_ridge_feature_importance(sample_dataset):
-    """Test feature importance is returned correctly."""
-    X = sample_dataset.drop('target', axis=1)
-    y = sample_dataset['target']
-    
-    model = RidgeModel()
-    model.fit(X, y, best_alpha=100.0)
-    
-    importance = model.get_feature_importance()
-    
-    assert 'feature' in importance.columns
-    assert 'coefficient' in importance.columns
-    assert len(importance) == len(X.columns)
+class TestRidgeModel:
+
+    def test_fit_predict(self, sample_data):
+        X, y = sample_data
+        model = RidgeModel()
+        model.fit(X, y, best_alpha=100.0)
+        preds = model.predict(X)
+        assert len(preds) == len(y)
+
+    def test_is_fitted_after_fit(self, sample_data):
+        X, y = sample_data
+        model = RidgeModel()
+        assert not model.is_fitted
+        model.fit(X, y, best_alpha=100.0)
+        assert model.is_fitted
+
+    def test_predict_raises_before_fit(self, sample_data):
+        X, _ = sample_data
+        model = RidgeModel()
+        with pytest.raises(ValueError):
+            model.predict(X)
+
+    def test_feature_importance_returns_dataframe(self, sample_data):
+        X, y = sample_data
+        model = RidgeModel()
+        model.fit(X, y, best_alpha=100.0)
+        importance = model.get_feature_importance()
+        assert isinstance(importance, pd.DataFrame)
+        assert 'feature' in importance.columns
+        assert 'coefficient' in importance.columns
+        assert len(importance) == X.shape[1]
+
+    def test_save_load(self, tmp_path, sample_data):
+        X, y = sample_data
+        model = RidgeModel()
+        model.fit(X, y, best_alpha=100.0)
+
+        path = str(tmp_path / "ridge.pkl")
+        model.save(path)
+        loaded = RidgeModel.load(path)
+
+        np.testing.assert_array_almost_equal(
+            model.predict(X),
+            loaded.predict(X)
+        )
+
+    def test_predictions_are_finite(self, sample_data):
+        X, y = sample_data
+        model = RidgeModel()
+        model.fit(X, y, best_alpha=100.0)
+        preds = model.predict(X)
+        assert np.all(np.isfinite(preds))
 
 
-def test_ridge_save_load(tmp_path, sample_dataset):
-    """Test model saves and loads correctly."""
-    X = sample_dataset.drop('target', axis=1)
-    y = sample_dataset['target']
-    
-    model = RidgeModel()
-    model.fit(X, y, best_alpha=100.0)
-    
-    save_path = tmp_path / "test_model.pkl"
-    model.save(str(save_path))
-    
-    loaded_model = RidgeModel.load(str(save_path))
-    
-    original_preds = model.predict(X)
-    loaded_preds = loaded_model.predict(X)
-    
-    np.testing.assert_array_almost_equal(original_preds, loaded_preds)
+class TestRandomForestModel:
+
+    def test_fit_predict(self, sample_data):
+        X, y = sample_data
+        model = RandomForestModel()
+        model.fit(X, y)
+        preds = model.predict(X)
+        assert len(preds) == len(y)
+
+    def test_feature_importance_sums_to_one(self, sample_data):
+        X, y = sample_data
+        model = RandomForestModel()
+        model.fit(X, y)
+        importance = model.get_feature_importance()
+        assert abs(importance['importance'].sum() - 1.0) < 0.001
+
+
+class TestGradientBoostingModel:
+
+    def test_fit_predict(self, sample_data):
+        X, y = sample_data
+        model = GradientBoostingModel()
+        model.fit(X, y)
+        preds = model.predict(X)
+        assert len(preds) == len(y)
+
+    def test_feature_importance_sums_to_one(self, sample_data):
+        X, y = sample_data
+        model = GradientBoostingModel()
+        model.fit(X, y)
+        importance = model.get_feature_importance()
+        assert abs(importance['importance'].sum() - 1.0) < 0.001

@@ -15,14 +15,15 @@ class DataLoader:
     def __init__(self, config: dict = None):
         self.config = config or load_data_config()
     
+    # In load_prices(), add sort after loading:
     def load_prices(self) -> pd.DataFrame:
-        """Load crypto price data."""
         path = self.config['data_paths']['raw']['prices']
         logger.info(f"Loading prices from {path}")
         
         df = pd.read_csv(path, index_col=0, parse_dates=True)
         df = ensure_datetime_index(df)
         df = remove_timezone(df)
+        df = df.sort_index()          # ADD THIS LINE
         
         logger.info(f"Loaded prices: {len(df)} rows, {df.columns.tolist()}")
         return df

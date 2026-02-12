@@ -10,18 +10,18 @@ class DataValidator:
     """
     
     def validate_prices(self, df: pd.DataFrame) -> bool:
-        """Validate price data."""
         logger.info("Validating price data...")
         errors = []
         
         if 'bitcoin' not in df.columns:
             errors.append("Missing 'bitcoin' column in prices")
+        else:
+            # Only check NaN if column exists
+            if df['bitcoin'].isna().sum() > len(df) * 0.1:
+                errors.append("More than 10% missing values in bitcoin prices")
         
         if not isinstance(df.index, pd.DatetimeIndex):
             errors.append("Price index is not DatetimeIndex")
-        
-        if df['bitcoin'].isna().sum() > len(df) * 0.1:
-            errors.append("More than 10% missing values in bitcoin prices")
         
         if len(df) < 365:
             errors.append(f"Too few price rows: {len(df)} (need at least 365)")
