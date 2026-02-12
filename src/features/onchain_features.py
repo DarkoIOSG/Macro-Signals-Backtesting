@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from tqdm.auto import tqdm
 from src.utils.logger import get_logger
 
@@ -35,24 +36,32 @@ class OnchainFeatureBuilder:
         return features
     
     def build_volume_features(self, df_volume: pd.DataFrame) -> pd.DataFrame:
-        """Build volume-based features."""
+        """Build volume-based features.
+        Note: raw volume values are in the hundreds of billions so we
+        log-transform before computing any features.
+        """
         if df_volume is None or df_volume.empty:
             logger.warning("Volume data not available, skipping")
             return pd.DataFrame()
         
         total_volume = df_volume.sum(axis=1)
+        
+        # Log-transform to bring from billions scale to ~20-30 range
+        # log1p handles zeros safely: log(1 + 0) = 0
+        log_volume = np.log1p(total_volume)
+        
         features = pd.DataFrame(index=df_volume.index)
         
         with tqdm(total=5, desc="Volume features", unit="feature") as pbar:
-            features['total_volume'] = total_volume
+            features['log_volume'] = log_volume
             pbar.update(1)
-            features['volume_ma_7d'] = total_volume.rolling(7).mean()
+            features['log_volume_ma_7d'] = log_volume.rolling(7).mean()
             pbar.update(1)
-            features['volume_ma_30d'] = total_volume.rolling(30).mean()
+            features['log_volume_ma_30d'] = log_volume.rolling(30).mean()
             pbar.update(1)
-            features['volume_vs_ma30'] = (total_volume / features['volume_ma_30d'] - 1) * 100
+            features['volume_vs_ma30'] = (log_volume / features['log_volume_ma_30d'] - 1) * 100
             pbar.update(1)
-            features['volume_change_7d'] = total_volume.pct_change(7) * 100
+            features['volume_change_7d'] = log_volume.diff(7)  # log diff ≈ % change
             pbar.update(1)
         
         logger.info(f"Built {len(features.columns)} volume features")

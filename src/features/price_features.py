@@ -21,6 +21,9 @@ class PriceFeatureBuilder:
     def build(self, btc: pd.Series) -> pd.DataFrame:
         """
         Build all price features.
+        Note: raw MA price levels are NOT stored as features (they contain
+        raw BTC prices in the billions which destroys linear models).
+        Only scale-free ratios are kept.
         
         Parameters:
         -----------
@@ -32,9 +35,13 @@ class PriceFeatureBuilder:
         """
         features = pd.DataFrame(index=btc.index)
         
+        # returns + volatility + price_vs_ma ratios + 2 crossovers + 1 roc/rsi block
         total = (len(self.return_windows) + 
                  len(self.volatility_windows) + 
-                 len(self.ma_windows) * 3 + 2 + 1)
+                 len(self.ma_windows) +    # price_vs_ma only (no raw MAs)
+                 2 +                        # crossovers
+                 2 +                        # roc
+                 1)                         # rsi
         
         with tqdm(total=total, desc="BTC features", unit="feature") as pbar:
             
@@ -51,19 +58,18 @@ class PriceFeatureBuilder:
                 )
                 pbar.update(1)
             
-            # Moving averages
+            # Compute MAs internally - NOT stored as features (raw BTC price levels
+            # are in the hundreds of thousands/billions, destroying linear models)
             mas = {}
             for w in self.ma_windows:
                 mas[w] = btc.rolling(w).mean()
-                features[f'ma_{w}d'] = mas[w]
-                pbar.update(1)
             
-            # Price vs moving averages
+            # Price vs moving averages (scale-free ratios, safe for all models)
             for w in self.ma_windows:
                 features[f'price_vs_ma{w}'] = (btc / mas[w] - 1) * 100
                 pbar.update(1)
             
-            # MA crossovers
+            # MA crossovers (also scale-free ratios)
             if 7 in self.ma_windows and 30 in self.ma_windows:
                 features['ma7_vs_ma30'] = (mas[7] / mas[30] - 1) * 100
                 pbar.update(1)
