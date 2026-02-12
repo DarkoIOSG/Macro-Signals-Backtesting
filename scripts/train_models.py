@@ -2,17 +2,18 @@
 Train all models or a specific model.
 
 Usage:
-    python scripts/train_models.py                    # Train all models
-    python scripts/train_models.py --model ridge      # Train only Ridge
+    python scripts/train_models.py                     # Train all models
+    python scripts/train_models.py --model ridge
     python scripts/train_models.py --model random_forest
     python scripts/train_models.py --model gradient_boosting
 """
 
 import sys
 import argparse
+import warnings
+warnings.filterwarnings('ignore')
 from pathlib import Path
 
-# Add project root to path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from src.data.loader import DataLoader
@@ -31,94 +32,130 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-def run(model_name: str = None):
-    """Run complete training pipeline."""
-    
-    logger.info("="*60)
-    logger.info("STARTING TRAINING PIPELINE")
-    logger.info("="*60)
-    
-    # Load configs
+def build_dataset():
+    """Run full data + feature pipeline and return train/test splits."""
+
     data_config = load_data_config()
-    model_config = load_model_config()
     feature_config = load_feature_config()
-    
-    # Load data
+
+    # Load & validate & preprocess
     loader = DataLoader(data_config)
     raw_data = loader.load_all()
-    
-    # Validate
+
     validator = DataValidator()
     if not validator.validate_all(raw_data):
         raise ValueError("Data validation failed!")
-    
-    # Preprocess
+
     preprocessor = DataPreprocessor()
     clean_data = preprocessor.preprocess_all(raw_data)
-    
     btc = clean_data['prices']['bitcoin']
-    
+
     # Build features
-    price_builder = PriceFeatureBuilder(feature_config.get('price_features'))
-    macro_builder = MacroFeatureBuilder(feature_config.get('macro_features'))
-    onchain_builder = OnchainFeatureBuilder(feature_config.get('onchain_features'))
-    target_builder = TargetBuilder(
-        horizon_days=data_config['target']['horizon_days']
+    price_features = PriceFeatureBuilder(
+        feature_config.get('price_features')
+    ).build(btc)
+
+    macro_features = MacroFeatureBuilder(
+        feature_config.get('macro_features')
+    ).build(
+        df_vix=clean_data.get('vix'),
+        df_hy=clean_data.get('hy_spreads')
     )
-    
-    price_features = price_builder.build(btc)
-    macro_features = macro_builder.build(clean_data.get('vix'), clean_data.get('hy_spreads'))
-    onchain_features = onchain_builder.build(clean_data.get('mvrv'), clean_data.get('volume'))
-    target = target_builder.build(btc)
-    
-    # Combine and split
+
+    onchain_features = OnchainFeatureBuilder(
+        feature_config.get('onchain_features')
+    ).build(
+        df_mvrv=clean_data.get('mvrv'),
+        df_volume=clean_data.get('volume')
+    )
+
+    target = TargetBuilder(
+        horizon_days=data_config['target']['horizon_days']
+    ).build(btc)
+
+    # Combine & split
     selector = FeatureSelector()
-    all_features = selector.combine_features(price_features, macro_features, onchain_features)
+    all_features = selector.combine_features(
+        price_features, macro_features, onchain_features
+    )
     dataset = selector.build_dataset(all_features, target)
-    
-    train_ratio = data_config['date_ranges']['train_ratio']
-    X_train, X_test, y_train, y_test = selector.temporal_split(dataset, train_ratio)
-    
-    # Train models
+    X_train, X_test, y_train, y_test = selector.temporal_split(
+        dataset, data_config['date_ranges']['train_ratio']
+    )
+
+    logger.info(f"Dataset ready - Train: {X_train.shape}, Test: {X_test.shape}")
+    return X_train, X_test, y_train, y_test
+
+
+def run(model_name: str = None):
+    """Run complete training pipeline."""
+
+    logger.info("=" * 60)
+    logger.info("STARTING TRAINING PIPELINE")
+    logger.info("=" * 60)
+
+    model_config = load_model_config()
+
+    # Build dataset
+    X_train, X_test, y_train, y_test = build_dataset()
+
+    # Train
     trainer = ModelTrainer(config=model_config)
     evaluator = ModelEvaluator()
-    
+
     models_to_train = (
-        ['ridge', 'random_forest', 'gradient_boosting'] 
+        ['ridge', 'random_forest', 'gradient_boosting']
         if model_name is None else [model_name]
     )
-    
+
     results = {}
     for name in models_to_train:
         logger.info(f"\nTraining {name}...")
-        
+
         train_func = getattr(trainer, f"train_{name}")
         model = train_func(X_train, y_train)
-        
-        # Evaluate
-        eval_results = evaluator.evaluate_model(model, X_train, y_train, X_test, y_test)
+
+        eval_results = evaluator.evaluate_model(
+            model, X_train, y_train, X_test, y_test
+        )
         results[name] = eval_results
-        
-        # Save model
+
         model.save(f"results/models/{name}_model.pkl")
-        
-        logger.info(f"{name} - Test R²: {eval_results['test']['r2']:.4f}")
-    
-    # Compare models
+        logger.info(f"{name} saved - Test R²: {eval_results['test']['r2']:.4f}")
+
+    # Compare all models
     if len(results) > 1:
         comparison = evaluator.compare_models(results)
         logger.info("\nModel Comparison:")
         logger.info(f"\n{comparison.to_string()}")
-    
-    logger.info("\nTraining pipeline complete!")
+        comparison.to_csv("results/metrics/model_comparison.csv")
+        logger.info("Comparison saved to results/metrics/model_comparison.csv")
+    else:
+        # Single model - save its metrics too
+        name = models_to_train[0]
+        r = results[name]
+        logger.info(f"\n{name} Results:")
+        logger.info(f"  Train R²:        {r['train']['r2']:.4f}")
+        logger.info(f"  Test R²:         {r['test']['r2']:.4f}")
+        logger.info(f"  Train RMSE:      {r['train']['rmse']:.4f}%")
+        logger.info(f"  Test RMSE:       {r['test']['rmse']:.4f}%")
+        logger.info(f"  Overfitting gap: {r['overfitting_gap']:.4f}")
+
+    logger.info("\n" + "=" * 60)
+    logger.info("PIPELINE COMPLETE!")
+    logger.info("=" * 60)
+
     return results
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Train prediction models')
-    parser.add_argument('--model', type=str, default=None,
-                       choices=['ridge', 'random_forest', 'gradient_boosting'],
-                       help='Model to train (default: all)')
+    parser = argparse.ArgumentParser(description='Train Bitcoin return prediction models')
+    parser.add_argument(
+        '--model',
+        type=str,
+        default=None,
+        choices=['ridge', 'random_forest', 'gradient_boosting'],
+        help='Model to train (default: all)'
+    )
     args = parser.parse_args()
-    
     run(model_name=args.model)
